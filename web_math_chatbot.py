@@ -36,7 +36,7 @@ def check_password():
 
 # --- Gemini API 호출 함수 ---
 def get_gemini_response(prompt_parts, model_display_name, model_object):
-    # (API 호출 함수는 이전과 동일)
+    # (API 호출 함수는 이전 버전과 동일 - 기본 프롬프트 사용 중)
     gemini_response_text = ""
     try:
         with st.spinner(f"{model_display_name}가 답변 생성 중... 🤔"):
@@ -68,8 +68,11 @@ if check_password():
         st.session_state.messages = []
     if "current_image_bytes" not in st.session_state:
         st.session_state.current_image_bytes = None
-    if "last_processed_image_info" not in st.session_state:
-        st.session_state.last_processed_image_info = None
+    # *** 수정: 새 업로드 처리를 위한 세션 상태 변수 추가 ***
+    if "last_uploaded_file_id" not in st.session_state:
+         st.session_state.last_uploaded_file_id = None
+    if "solve_triggered_for_current_upload" not in st.session_state:
+         st.session_state.solve_triggered_for_current_upload = False
 
     # --- 웹페이지 UI ---
     st.title("🔢 수학 문제 풀이 셔틀 🚀")
@@ -104,23 +107,31 @@ if check_password():
     uploaded_file = st.file_uploader(
         "여기에 수학 문제 이미지를 업로드하세요 (PNG, JPG)",
         type=["png", "jpg", "jpeg"],
-        key="file_uploader"
+        key="file_uploader" # key 유지
     )
 
-    # 새 이미지 업로드 감지 및 자동 처리
+    # *** 수정: 이미지 업로드 시 항상 자동 풀이 로직 ***
     if uploaded_file is not None:
         current_bytes = uploaded_file.getvalue()
         st.session_state.current_image_bytes = current_bytes
-        current_image_info = (uploaded_file.name, uploaded_file.size)
+        current_upload_id = uploaded_file.file_id # 각 업로드 인스턴스의 고유 ID
+
+        # 화면에 이미지 표시
         st.image(current_bytes, caption="업로드된 문제 이미지", width=300)
 
-        if current_image_info != st.session_state.get("last_processed_image_info"):
-            st.info(f"새 이미지가 감지되었습니다. {selected_model_display_name}에게 자동 풀이를 요청합니다...")
-            st.session_state.messages = []
+        # 새 업로드 인스턴스인지 확인 (동일 파일 재업로드 포함)
+        if current_upload_id != st.session_state.get("last_uploaded_file_id"):
+             st.session_state.last_uploaded_file_id = current_upload_id
+             st.session_state.solve_triggered_for_current_upload = False # 새 업로드이므로 플래그 리셋
+
+        # 현재 업로드에 대해 아직 풀이가 실행되지 않았다면 실행
+        if not st.session_state.get("solve_triggered_for_current_upload", False):
+            st.info(f"이미지 업로드를 감지하여 {selected_model_display_name}에게 자동 풀이를 요청합니다...")
+            st.session_state.messages = [] # 새 풀이 시작 시 메시지 기록 초기화
 
             try:
                 img = PIL.Image.open(io.BytesIO(current_bytes))
-                # *** 수정: 자동 풀이 프롬프트를 기본 버전으로 되돌림 ***
+                # 기본 프롬프트 사용 (이전 단계에서 설정됨)
                 auto_solve_prompt = [
                     f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
                     최대한 자세한 풀이를 제공하여서, 첨부한 이미지 내의 수학문제를 풀어줘.
@@ -129,29 +140,41 @@ if check_password():
                     """,
                     img
                 ]
+
+                # *** 중요: 풀이 요청 전에 플래그 설정 (반복 방지) ***
+                st.session_state.solve_triggered_for_current_upload = True
+
+                # API 호출
                 gemini_response_text = get_gemini_response(
                     auto_solve_prompt,
                     selected_model_display_name,
                     model
                 )
+
+                # 결과 추가
                 if gemini_response_text:
                      st.session_state.messages.append({"role": "assistant", "content": gemini_response_text})
-                st.session_state.last_processed_image_info = current_image_info
+
+                # *** 추가: 성공적으로 처리 후 화면 즉시 업데이트를 위해 rerun ***
+                # API 호출이 완료되고 메시지가 추가된 상태를 바로 반영
+                st.rerun()
 
             except Exception as e:
                 st.error(f"이미지 처리 또는 자동 풀이 중 오류 발생: {e}")
                 error_message = f"오류 발생: {e}"
                 if error_message not in [msg.get("content") for msg in st.session_state.messages]:
                     st.session_state.messages.append({"role": "assistant", "content": error_message})
-                st.session_state.last_processed_image_info = current_image_info
+                # 오류 발생 시에도 해당 업로드에 대한 처리는 시도된 것으로 간주 (플래그는 이미 True)
+                st.rerun() # 오류 메시지 표시를 위해 rerun
 
-    # --- 채팅 기록 출력 ---
-    st.markdown("### 대화 내용")
-    chat_container = st.container(height=400)
-    with chat_container:
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
+
+    # --- 채팅 기록 출력 (박스 제거됨) ---
+    # st.markdown("### 대화 내용") # 제목 제거
+    # chat_container = st.container(height=400) # 컨테이너 제거
+    # with chat_container: # 컨테이너 제거
+    for message in st.session_state.messages: # 들여쓰기 제거
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
     # --- 채팅 입력 처리 ---
     if user_input := st.chat_input(f"{selected_model_display_name}에게 질문하기..."):
@@ -161,10 +184,9 @@ if check_password():
         gemini_response_text = ""
 
         if st.session_state.current_image_bytes is not None:
-            # 이미지와 함께 추가 질문
+            # 이미지와 함께 추가 질문 (기본 프롬프트 사용)
             try:
                 img = PIL.Image.open(io.BytesIO(st.session_state.current_image_bytes))
-                # *** 수정: 추가 질문 프롬프트를 기본 버전으로 되돌림 ***
                 prompt_parts = [
                     f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
                     이전에 제시된 이미지와 풀이에 대해 다음 추가 질문에 답해주세요.
@@ -178,8 +200,7 @@ if check_password():
                  st.error(f"이미지 로딩 중 오류 발생: {e}")
                  gemini_response_text = "이미지를 다시 로드하는 데 문제가 발생했습니다."
         else:
-            # 텍스트 질문만
-            # *** 수정: 텍스트 질문 프롬프트를 기본 버전으로 되돌림 ***
+            # 텍스트 질문만 (기본 프롬프트 사용)
             prompt_parts = [
                  f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
                  다음 질문에 답해주세요. 수학 관련 질문이 아니면 관련 없다고 답변해주세요.
@@ -189,7 +210,6 @@ if check_password():
                  """
             ]
 
-        # 프롬프트가 준비되었고, 이미지 로딩 오류 등이 없었을 경우 API 호출
         if not gemini_response_text and prompt_parts:
             try:
                 gemini_response_text = get_gemini_response(
@@ -201,9 +221,7 @@ if check_password():
                  st.error(f"질문 처리 중 예상치 못한 오류 발생: {e}")
                  gemini_response_text = "질문 처리 중 오류가 발생했습니다."
 
-        # 응답이 있으면 메시지 목록에 추가
         if gemini_response_text:
              st.session_state.messages.append({"role": "assistant", "content": gemini_response_text})
 
-        # 화면 업데이트를 위해 rerun
         st.rerun()
