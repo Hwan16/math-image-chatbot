@@ -41,18 +41,33 @@ def get_gemini_response(prompt_parts, model_display_name, model_object):
     try:
         with st.spinner(f"{model_display_name}가 답변 생성 중... 🤔"):
             response = model_object.generate_content(prompt_parts, stream=False)
+            # GenerationConfig 추가 시도 (온도 조절 - 선택 사항)
+            # generation_config = genai.types.GenerationConfig(temperature=0.2)
+            # response = model_object.generate_content(
+            #    prompt_parts,
+            #    stream=False,
+            #    generation_config=generation_config
+            # )
+
             if hasattr(response, 'text'):
                  gemini_response_text = response.text
             elif response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
                  gemini_response_text = "".join(part.text for part in response.candidates[0].content.parts if hasattr(part, 'text'))
             else:
-                 safety_feedback = response.prompt_feedback
-                 block_reason = safety_feedback.block_reason if hasattr(safety_feedback, 'block_reason') else "알 수 없음"
-                 gemini_response_text = f"죄송합니다. 답변 내용을 가져올 수 없습니다. (이유: {block_reason})"
+                 # 안전 설정 등으로 인해 후보가 없는 경우 처리
+                 try:
+                      safety_feedback = response.prompt_feedback
+                      block_reason = safety_feedback.block_reason if hasattr(safety_feedback, 'block_reason') else "알 수 없음"
+                      gemini_response_text = f"죄송합니다. 답변 생성에 실패했습니다. (차단 이유: {block_reason})"
+                 except Exception:
+                      # response 객체 구조가 예상과 다를 경우 일반적인 메시지 표시
+                      gemini_response_text = "죄송합니다. 답변 내용을 가져올 수 없습니다."
+
     except Exception as e:
         st.error(f"Gemini API ({model_object.model_name}) 호출 중 오류 발생: {e}")
         gemini_response_text = "오류가 발생하여 답변을 가져올 수 없습니다."
     return gemini_response_text
+
 
 # --- 페이지 기본 설정 ---
 st.set_page_config(page_title="수학 문제 풀이 셔틀", page_icon="🚀")
@@ -90,6 +105,7 @@ if check_password():
         st.stop()
     try:
         genai.configure(api_key=API_KEY)
+        # 참고: 모델별 기본 설정 외 추가 설정을 하려면 safety_settings 등을 여기서 조절 가능
         model = genai.GenerativeModel(selected_model_id)
     except Exception as e:
         st.error(f"앗! Gemini 모델({selected_model_id})을 불러오는 중 문제가 발생했어요: {e}")
@@ -112,17 +128,17 @@ if check_password():
 
         if current_image_info != st.session_state.get("last_processed_image_info"):
             st.info(f"새 이미지가 감지되었습니다. {selected_model_display_name}에게 자동 풀이를 요청합니다...")
-            st.session_state.messages = []
+            st.session_state.messages = [] # 새 이미지 처리 시 메시지 기록 초기화
 
             try:
                 img = PIL.Image.open(io.BytesIO(current_bytes))
-                # *** 수정: 자동 풀이 프롬프트에 새 형식 지침 적용 ***
+                # *** 수정: 자동 풀이 프롬프트에 새 역할 및 형식 지침 적용 ***
                 auto_solve_prompt = [
-                    f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
+                    f"""당신은 한국 고등부 수학 강사입니다.
                     최대한 자세한 풀이를 제공하여서, 첨부한 이미지 내의 수학문제를 풀어줘.
                     만약 여러 개의 문제가 있으면 첫번째로 보이는 문제를 풀어줘.
                     수식은 LaTeX 형식($$...$$ 또는 $$ ... $$)으로 작성해주세요.
-                    한 문장이 끝나면 반드시 줄바꿈(\n)을 사용하고, LaTeX 수식($$...$$ 또는 $$ ... $$)도 한 줄에 하나씩만 명확하게 표시해줘.
+                    한 줄에는 반드시 한 문장만 넣어주고, 줄바꿈(\n)을 무조건 해서 다음 문장을 적어주세요.
                     """,
                     img
                 ]
@@ -158,14 +174,15 @@ if check_password():
         gemini_response_text = ""
 
         if st.session_state.current_image_bytes is not None:
+            # 이미지와 함께 추가 질문
             try:
                 img = PIL.Image.open(io.BytesIO(st.session_state.current_image_bytes))
-                # *** 수정: 추가 질문 프롬프트에 새 형식 지침 적용 ***
+                # *** 수정: 추가 질문 프롬프트에 새 역할 및 형식 지침 적용 ***
                 prompt_parts = [
-                    f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
+                    f"""당신은 한국 고등부 수학 강사입니다.
                     이전에 제시된 이미지와 풀이에 대해 다음 추가 질문에 답해주세요.
                     수식은 LaTeX 형식($$...$$ 또는 $$ ... $$)으로 작성해주세요.
-                    한 문장이 끝나면 반드시 줄바꿈(\n)을 사용하고, LaTeX 수식($$...$$ 또는 $$ ... $$)도 한 줄에 하나씩만 명확하게 표시해줘.
+                    한 줄에는 반드시 한 문장만 넣어주고, 줄바꿈(\n)을 무조건 해서 다음 문장을 적어주세요.
 
                     추가 질문: {user_input}
                     """,
@@ -175,17 +192,19 @@ if check_password():
                  st.error(f"이미지 로딩 중 오류 발생: {e}")
                  gemini_response_text = "이미지를 다시 로드하는 데 문제가 발생했습니다."
         else:
-            # *** 수정: 텍스트 질문 프롬프트에 새 형식 지침 적용 ***
+            # 텍스트 질문만
+            # *** 수정: 텍스트 질문 프롬프트에 새 역할 및 형식 지침 적용 ***
             prompt_parts = [
-                 f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
+                 f"""당신은 한국 고등부 수학 강사입니다.
                  다음 질문에 답해주세요. 수학 관련 질문이 아니면 관련 없다고 답변해주세요.
                  수식은 LaTeX 형식($$...$$ 또는 $$ ... $$)으로 작성해주세요.
-                 한 문장이 끝나면 반드시 줄바꿈(\n)을 사용하고, LaTeX 수식($$...$$ 또는 $$ ... $$)도 한 줄에 하나씩만 명확하게 표시해줘.
+                 한 줄에는 반드시 한 문장만 넣어주고, 줄바꿈(\n)을 무조건 해서 다음 문장을 적어주세요.
 
                  질문: {user_input}
                  """
             ]
 
+        # 프롬프트가 준비되었고, 이미지 로딩 오류 등이 없었을 경우 API 호출
         if not gemini_response_text and prompt_parts:
             try:
                 gemini_response_text = get_gemini_response(
@@ -197,7 +216,9 @@ if check_password():
                  st.error(f"질문 처리 중 예상치 못한 오류 발생: {e}")
                  gemini_response_text = "질문 처리 중 오류가 발생했습니다."
 
+        # 응답이 있으면 메시지 목록에 추가
         if gemini_response_text:
              st.session_state.messages.append({"role": "assistant", "content": gemini_response_text})
 
+        # 화면 업데이트를 위해 rerun (사용자 입력 및 AI 응답 표시)
         st.rerun()
