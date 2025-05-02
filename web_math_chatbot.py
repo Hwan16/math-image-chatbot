@@ -122,7 +122,7 @@ if check_password():
                     최대한 자세한 풀이를 제공하여서, 첨부한 이미지 내의 수학문제를 풀어줘.
                     만약 여러 개의 문제가 있으면 첫번째로 보이는 문제를 풀어줘.
                     수식은 LaTeX 형식($$...$$ 또는 $$ ... $$)으로 작성해주세요.
-                    설명을 할 때, 각 문장이 끝나면 반드시 줄바꿈(\n)을 해서 가독성을 높여줘.
+                    한 문장이 끝나면 반드시 줄바꿈(\n)을 사용하고, LaTeX 수식($$...$$ 또는 $$ ... $$)도 한 줄에 하나씩만 명확하게 표시해줘.
                     """,
                     img
                 ]
@@ -143,8 +143,8 @@ if check_password():
                 st.session_state.last_processed_image_info = current_image_info
 
     # --- 채팅 기록 출력 ---
-    st.markdown("### 대화 내용") # 제목 유지
-    chat_container = st.container(height=400) # 스크롤 컨테이너 유지
+    st.markdown("### 대화 내용")
+    chat_container = st.container(height=400)
     with chat_container:
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
@@ -165,7 +165,7 @@ if check_password():
                     f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
                     이전에 제시된 이미지와 풀이에 대해 다음 추가 질문에 답해주세요.
                     수식은 LaTeX 형식($$...$$ 또는 $$ ... $$)으로 작성해주세요.
-                    설명을 할 때, 각 문장이 끝나면 반드시 줄바꿈(\n)을 해서 가독성을 높여줘.
+                    한 문장이 끝나면 반드시 줄바꿈(\n)을 사용하고, LaTeX 수식($$...$$ 또는 $$ ... $$)도 한 줄에 하나씩만 명확하게 표시해줘.
 
                     추가 질문: {user_input}
                     """,
@@ -180,7 +180,7 @@ if check_password():
                  f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
                  다음 질문에 답해주세요. 수학 관련 질문이 아니면 관련 없다고 답변해주세요.
                  수식은 LaTeX 형식($$...$$ 또는 $$ ... $$)으로 작성해주세요.
-                 설명을 할 때, 각 문장이 끝나면 반드시 줄바꿈(\n)을 해서 가독성을 높여줘.
+                 한 문장이 끝나면 반드시 줄바꿈(\n)을 사용하고, LaTeX 수식($$...$$ 또는 $$ ... $$)도 한 줄에 하나씩만 명확하게 표시해줘.
 
                  질문: {user_input}
                  """
