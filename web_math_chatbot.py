@@ -36,7 +36,7 @@ def check_password():
 
 # --- Gemini API 호출 함수 ---
 def get_gemini_response(prompt_parts, model_display_name, model_object):
-    """주어진 프롬프트와 모델 객체로 Gemini API를 호출하고 결과를 반환"""
+    # (API 호출 함수는 이전과 동일)
     gemini_response_text = ""
     try:
         response = model_object.generate_content(prompt_parts, stream=False)
@@ -61,10 +61,11 @@ if check_password():
     # --- 세션 상태 초기화 ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
-    if "current_image_bytes" not in st.session_state: # 이미지 데이터를 bytes로 저장
+    if "current_image_bytes" not in st.session_state:
         st.session_state.current_image_bytes = None
-    if "last_processed_image_id" not in st.session_state: # 마지막 자동 처리된 이미지 ID
-        st.session_state.last_processed_image_id = None
+    # *** 수정: ID 대신 파일 정보(이름, 크기) 튜플 사용 ***
+    if "last_processed_image_info" not in st.session_state:
+        st.session_state.last_processed_image_info = None
 
     # --- 웹페이지 UI ---
     st.title("🔢 수학 문제 풀이 셔틀 🚀")
@@ -99,29 +100,26 @@ if check_password():
     uploaded_file = st.file_uploader(
         "여기에 수학 문제 이미지를 업로드하세요 (PNG, JPG)",
         type=["png", "jpg", "jpeg"],
-        key="file_uploader" # key를 지정하여 상태 추적 용이
+        key="file_uploader"
     )
 
     # 새 이미지 업로드 감지 및 자동 처리
     if uploaded_file is not None:
-        # 세션에 현재 이미지 저장 (bytes 형태로)
         current_bytes = uploaded_file.getvalue()
         st.session_state.current_image_bytes = current_bytes
-        current_image_id = uploaded_file.id # 파일 업로더는 고유 ID 제공
+        # *** 수정: 파일 ID 대신 파일 정보 (이름, 크기) 사용 ***
+        current_image_info = (uploaded_file.name, uploaded_file.size)
 
-        # 화면에 이미지 표시 (이전에 표시된 이미지와 다를 경우에만)
-        # (주의: Streamlit은 스크립트 재실행 시 위젯 상태 유지하므로, 항상 이미지 표시 필요)
+        # 이미지 표시
         st.image(current_bytes, caption="업로드된 문제 이미지", width=300)
 
-        # 이 이미지가 이전에 자동 처리되지 않았다면 처리 시작
-        if current_image_id != st.session_state.get("last_processed_image_id"):
+        # *** 수정: ID 대신 파일 정보로 비교 ***
+        if current_image_info != st.session_state.get("last_processed_image_info"):
             st.info(f"새 이미지가 감지되었습니다. {selected_model_display_name}에게 자동 풀이를 요청합니다...")
-            st.session_state.messages = [] # 새 이미지이므로 이전 대화 기록 초기화 (선택사항)
+            st.session_state.messages = [] # 새 이미지 업로드 시 채팅 기록 초기화 (선택 사항)
 
             try:
                 img = PIL.Image.open(io.BytesIO(current_bytes)) # bytes에서 이미지 로드
-
-                # 자동 풀이용 프롬프트
                 auto_solve_prompt = [
                     f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
                     최대한 자세한 풀이를 제공하여서, 첨부한 이미지 내의 수학문제를 풀어줘.
@@ -130,46 +128,38 @@ if check_password():
                     """,
                     img
                 ]
-
                 with st.chat_message("assistant"):
                     message_placeholder = st.empty()
                     with st.spinner(f"{selected_model_display_name}가 자동 풀이 중... 🤔"):
-                        # API 호출 함수 사용
                         gemini_response_text = get_gemini_response(
                             auto_solve_prompt,
                             selected_model_display_name,
-                            model # 현재 선택된 모델 객체 전달
+                            model
                         )
                     message_placeholder.markdown(gemini_response_text)
-
-                # 자동 풀이 결과 메시지 저장
                 st.session_state.messages.append({"role": "assistant", "content": gemini_response_text})
-                # 처리된 이미지 ID 저장 (중복 실행 방지)
-                st.session_state.last_processed_image_id = current_image_id
+                # *** 수정: ID 대신 파일 정보 저장 ***
+                st.session_state.last_processed_image_info = current_image_info
 
             except Exception as e:
                 st.error(f"이미지 처리 또는 자동 풀이 중 오류 발생: {e}")
-                # 오류 메시지도 채팅 기록에 추가 가능
                 st.session_state.messages.append({"role": "assistant", "content": f"오류 발생: {e}"})
-                st.session_state.last_processed_image_id = current_image_id # 오류가 나도 일단 처리된 걸로 간주
+                # *** 수정: ID 대신 파일 정보 저장 (오류 시에도) ***
+                st.session_state.last_processed_image_info = current_image_info
 
     # --- 채팅 기록 출력 ---
-    # (자동 풀이 결과도 여기에 포함되어 출력됨)
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
     # --- 채팅 입력 처리 (추가 질문 또는 텍스트 질문) ---
     if user_input := st.chat_input(f"{selected_model_display_name}에게 질문하기..."):
-        # 사용자 입력 메시지 추가 및 표시
+        # (채팅 입력 처리 로직은 이전과 동일)
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
-
         prompt_parts = []
         gemini_response_text = ""
-
-        # 현재 이미지가 있는지 확인 (추가 질문용)
         if st.session_state.current_image_bytes is not None:
             st.info(f"업로드된 이미지에 대해 {selected_model_display_name}에게 추가 질문합니다...")
             try:
@@ -186,8 +176,6 @@ if check_password():
             except Exception as e:
                  st.error(f"이미지 로딩 중 오류 발생: {e}")
                  gemini_response_text = "이미지를 다시 로드하는 데 문제가 발생했습니다."
-
-        # 이미지가 없다면 텍스트 질문으로 처리
         else:
             st.info(f"텍스트 질문으로 {selected_model_display_name}에게 질문합니다...")
             prompt_parts = [
@@ -198,20 +186,15 @@ if check_password():
                  질문: {user_input}
                  """
             ]
-
-        # API 호출 및 응답 처리
         if not gemini_response_text and prompt_parts:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
                 with st.spinner(f"{selected_model_display_name}가 답변 준비 중... 🤔"):
-                    # API 호출 함수 사용
                     gemini_response_text = get_gemini_response(
                         prompt_parts,
                         selected_model_display_name,
                         model
                     )
                 message_placeholder.markdown(gemini_response_text)
-
-        # 응답 메시지 저장
         if gemini_response_text:
              st.session_state.messages.append({"role": "assistant", "content": gemini_response_text})
