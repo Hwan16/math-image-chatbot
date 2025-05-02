@@ -63,7 +63,6 @@ if check_password():
         st.session_state.messages = []
     if "current_image_bytes" not in st.session_state:
         st.session_state.current_image_bytes = None
-    # *** 수정: ID 대신 파일 정보(이름, 크기) 튜플 사용 ***
     if "last_processed_image_info" not in st.session_state:
         st.session_state.last_processed_image_info = None
 
@@ -107,24 +106,22 @@ if check_password():
     if uploaded_file is not None:
         current_bytes = uploaded_file.getvalue()
         st.session_state.current_image_bytes = current_bytes
-        # *** 수정: 파일 ID 대신 파일 정보 (이름, 크기) 사용 ***
         current_image_info = (uploaded_file.name, uploaded_file.size)
-
-        # 이미지 표시
         st.image(current_bytes, caption="업로드된 문제 이미지", width=300)
 
-        # *** 수정: ID 대신 파일 정보로 비교 ***
         if current_image_info != st.session_state.get("last_processed_image_info"):
             st.info(f"새 이미지가 감지되었습니다. {selected_model_display_name}에게 자동 풀이를 요청합니다...")
-            st.session_state.messages = [] # 새 이미지 업로드 시 채팅 기록 초기화 (선택 사항)
+            st.session_state.messages = []
 
             try:
-                img = PIL.Image.open(io.BytesIO(current_bytes)) # bytes에서 이미지 로드
+                img = PIL.Image.open(io.BytesIO(current_bytes))
+                # *** 수정: 자동 풀이 프롬프트에 새 형식 지침 추가 ***
                 auto_solve_prompt = [
                     f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
                     최대한 자세한 풀이를 제공하여서, 첨부한 이미지 내의 수학문제를 풀어줘.
                     만약 여러 개의 문제가 있으면 첫번째로 보이는 문제를 풀어줘.
                     수식은 LaTeX 형식($$...$$ 또는 $$ ... $$)으로 작성해주세요.
+                    답변 시에는 한국어 문법 및 띄어쓰기 규칙을 잘 지켜서 명확하고 읽기 쉽게 설명해줘. 한 줄에는 한 문장만 작성하고, 다음 문장을 시작할 때는 줄바꿈(\n)을 사용해줘.
                     """,
                     img
                 ]
@@ -138,13 +135,11 @@ if check_password():
                         )
                     message_placeholder.markdown(gemini_response_text)
                 st.session_state.messages.append({"role": "assistant", "content": gemini_response_text})
-                # *** 수정: ID 대신 파일 정보 저장 ***
                 st.session_state.last_processed_image_info = current_image_info
 
             except Exception as e:
                 st.error(f"이미지 처리 또는 자동 풀이 중 오류 발생: {e}")
                 st.session_state.messages.append({"role": "assistant", "content": f"오류 발생: {e}"})
-                # *** 수정: ID 대신 파일 정보 저장 (오류 시에도) ***
                 st.session_state.last_processed_image_info = current_image_info
 
     # --- 채팅 기록 출력 ---
@@ -154,20 +149,23 @@ if check_password():
 
     # --- 채팅 입력 처리 (추가 질문 또는 텍스트 질문) ---
     if user_input := st.chat_input(f"{selected_model_display_name}에게 질문하기..."):
-        # (채팅 입력 처리 로직은 이전과 동일)
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
+
         prompt_parts = []
         gemini_response_text = ""
+
         if st.session_state.current_image_bytes is not None:
             st.info(f"업로드된 이미지에 대해 {selected_model_display_name}에게 추가 질문합니다...")
             try:
                 img = PIL.Image.open(io.BytesIO(st.session_state.current_image_bytes))
+                # *** 수정: 추가 질문 프롬프트에 새 형식 지침 추가 ***
                 prompt_parts = [
                     f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
                     이전에 제시된 이미지와 풀이에 대해 다음 추가 질문에 답해주세요.
                     수식은 LaTeX 형식($$...$$ 또는 $$ ... $$)으로 작성해주세요.
+                    답변 시에는 한국어 문법 및 띄어쓰기 규칙을 잘 지켜서 명확하고 읽기 쉽게 설명해줘. 한 줄에는 한 문장만 작성하고, 다음 문장을 시작할 때는 줄바꿈(\n)을 사용해줘.
 
                     추가 질문: {user_input}
                     """,
@@ -178,14 +176,17 @@ if check_password():
                  gemini_response_text = "이미지를 다시 로드하는 데 문제가 발생했습니다."
         else:
             st.info(f"텍스트 질문으로 {selected_model_display_name}에게 질문합니다...")
+            # *** 수정: 텍스트 질문 프롬프트에 새 형식 지침 추가 ***
             prompt_parts = [
                  f"""당신은 한국 고등학생 수준의 수학 문제 풀이 전문가입니다.
                  다음 질문에 답해주세요. 수학 관련 질문이 아니면 관련 없다고 답변해주세요.
                  수식은 LaTeX 형식($$...$$ 또는 $$ ... $$)으로 작성해주세요.
+                 답변 시에는 한국어 문법 및 띄어쓰기 규칙을 잘 지켜서 명확하고 읽기 쉽게 설명해줘. 한 줄에는 한 문장만 작성하고, 다음 문장을 시작할 때는 줄바꿈(\n)을 사용해줘.
 
                  질문: {user_input}
                  """
             ]
+
         if not gemini_response_text and prompt_parts:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
