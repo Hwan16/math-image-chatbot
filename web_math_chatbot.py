@@ -6,11 +6,10 @@ import PIL.Image # 이미지 처리를 위한 Pillow 라이브러리 가져오�
 # --- 모델 설정 ---
 # 사용 가능한 모델 목록 (표시 이름: 실제 모델 ID)
 AVAILABLE_MODELS = {
-    "⚡️ Gemini 2.0 Flash (빠름, 효율적)": "gemini-2.0-flash", # <-- 사용자가 요청한 모델 ID 반영
+    "⚡️ Gemini 2.0 Flash (빠름, 효율적)": "gemini-2.0-flash",
     "🚀 Gemini 2.5 Pro Exp (실험용, 고성능)": "gemini-2.5-pro-exp-03-25",
 }
-# 기본 모델 이름도 일치시키거나, 다른 기본값을 원하시면 수정하세요.
-DEFAULT_MODEL_NAME = "⚡️ Gemini 2.0 Flash (빠름, 효율적)" # <-- 기본값도 일치시킴
+DEFAULT_MODEL_NAME = "⚡️ Gemini 2.0 Flash (빠름, 효율적)"
 
 # --- 비밀번호 확인 함수 ---
 def check_password():
@@ -44,23 +43,23 @@ st.set_page_config(page_title="수학 문제 풀이 셔틀", page_icon="🚀")
 # --- 페이지 시작 시 비밀번호 확인 ---
 if check_password():
     # --- 비밀번호 인증 성공 후 앱 로직 시작 ---
-    # st.success("🔑 인증 성공! 챗봇을 시작합니다.", icon="✅") # 성공 메시지는 잠시 숨김
 
     # --- 웹페이지 제목 및 설명 ---
     st.title("🔢 수학 문제 풀이 셔틀 🚀")
     st.caption("Gemini AI가 이미지 속 수학 문제를 풀어드립니다.")
 
-    # --- 모델 선택 UI ---
-    st.sidebar.header("⚙️ 모델 설정") # 사이드바에 설정 위치
-    selected_model_display_name = st.sidebar.selectbox(
+    # --- 모델 선택 UI (메인 화면으로 이동) ---
+    st.markdown("---") # 구분선 추가
+    st.subheader("⚙️ 모델 설정") # st.sidebar 제거
+    selected_model_display_name = st.selectbox( # st.sidebar 제거
         "사용할 Gemini 모델을 선택하세요:",
-        options=list(AVAILABLE_MODELS.keys()), # 딕셔너리의 키(표시 이름) 목록을 옵션으로 제공
-        index=list(AVAILABLE_MODELS.keys()).index(DEFAULT_MODEL_NAME), # 기본값 설정
-        key="selected_model" # session_state에 저장될 키
+        options=list(AVAILABLE_MODELS.keys()),
+        index=list(AVAILABLE_MODELS.keys()).index(DEFAULT_MODEL_NAME),
+        key="selected_model"
     )
-    # 선택된 표시 이름에 해당하는 실제 모델 ID 가져오기
     selected_model_id = AVAILABLE_MODELS[selected_model_display_name]
-    st.sidebar.caption(f"현재 선택된 모델 ID: `{selected_model_id}`")
+    st.caption(f"현재 선택된 모델 ID: `{selected_model_id}`") # st.sidebar 제거
+    st.markdown("---") # 구분선 추가
 
     # --- Gemini API 설정 ---
     API_KEY = st.secrets.get("GEMINI_API_KEY", None)
@@ -71,26 +70,21 @@ if check_password():
 
     try:
         genai.configure(api_key=API_KEY)
-        # *** 모델 객체 생성: 사용자가 선택한 모델 ID 사용 ***
         model = genai.GenerativeModel(selected_model_id)
-        # print(f"✨ Gemini 모델 ({selected_model_id})이 성공적으로 연결되었습니다! ✨") # 확인용 로그
-
     except Exception as e:
-        # 모델 로딩 실패 시 명확한 에러 메시지 제공
         st.error(f"앗! Gemini 모델({selected_model_id})을 불러오는 중 문제가 발생했어요: {e}")
         st.warning("선택한 모델 이름이 정확한지, API 키에 해당 모델 접근 권한이 있는지 확인해주세요.")
-        st.stop() # 모델 로딩 실패 시 앱 실행 중지
+        st.stop()
 
 
     # --- Streamlit 웹 앱 인터페이스 ---
-    # (채팅 기록, 이미지 업로드, 사용자 입력 처리 로직은 이전과 거의 동일)
+    # (채팅 기록, 이미지 업로드, 사용자 입력 처리 로직은 이전과 동일)
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "uploaded_image" not in st.session_state:
         st.session_state.uploaded_image = None
 
-    # 이전 대화 기록 출력
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -104,7 +98,7 @@ if check_password():
           st.info("이미지가 업로드되었습니다. 아래 채팅창에 풀이를 요청하세요 (예: '이 문제 풀어줘')")
           st.session_state.image_processed = True
 
-    if user_input := st.chat_input(f"{selected_model_display_name}에게 질문하기..."): # 입력창 프롬프트 변경
+    if user_input := st.chat_input(f"{selected_model_display_name}에게 질문하기..."):
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
@@ -113,7 +107,6 @@ if check_password():
         gemini_response_text = ""
         current_image_to_process = st.session_state.get("uploaded_image", None)
 
-        # (이미지 처리 및 프롬프트 생성 로직은 동일)
         if current_image_to_process is not None:
             st.info(f"업로드된 이미지를 포함하여 {selected_model_display_name}에게 질문합니다...")
             try:
@@ -142,17 +135,12 @@ if check_password():
                  """
             ]
 
-        # *** Gemini API 호출 (동일한 model 객체 사용) ***
         if not gemini_response_text and prompt_parts:
             with st.chat_message("assistant"):
                 message_placeholder = st.empty()
-                # 스피너 메시지에 모델 이름 표시
                 with st.spinner(f"{selected_model_display_name}가 열심히 풀고 있어요... 🤔"):
                     try:
-                        # *** API 호출 부분은 변경 없음, 이미 model 객체가 선택된 모델로 생성됨 ***
                         response = model.generate_content(prompt_parts, stream=False)
-
-                        # (답변 처리 로직 동일)
                         if hasattr(response, 'text'):
                              gemini_response_text = response.text
                         elif response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
