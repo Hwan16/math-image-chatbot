@@ -7,7 +7,7 @@ import PIL.Image # 이미지 처리를 위한 Pillow 라이브러리 가져오�
 # --- 모델 설정 ---
 AVAILABLE_MODELS = {
     "⚡️ Gemini 2.0 Flash (빠름, 효율적)": "gemini-2.0-flash",
-    "🚀 Gemini 2.5 Pro Exp (실험용, 고성능)": "gemini-2.5-pro-exp-03-25",
+    "🚀 Gemini 2.5 Pro Exp (실험용, 고성능)": "gemini-2.5-pro-preview-05-06",
 }
 DEFAULT_MODEL_NAME = "⚡️ Gemini 2.0 Flash (빠름, 효율적)"
 
